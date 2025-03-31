@@ -15,6 +15,9 @@ const nextConfig = withPWA({
     });
     return config;
   },
+  experimental: {
+    serverComponentsExternalPackages: ["lz4"],
+  },
   devIndicators: {
     buildActivity: true,
     buildActivityPosition: "bottom-left",

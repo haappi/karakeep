@@ -7,6 +7,9 @@ const nextConfig = {
     });
     return config;
   },
+  experimental: {
+    serverComponentsExternalPackages: ["lz4"],
+  },
   /** We already do linting and typechecking as separate tasks in CI */
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },

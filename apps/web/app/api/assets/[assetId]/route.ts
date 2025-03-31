@@ -44,7 +44,7 @@ export async function GET(
     const start = parseInt(parts[0], 10);
     const end = parts[1] ? parseInt(parts[1], 10) : size - 1;
 
-    const stream = createAssetReadStream({
+    const stream = await createAssetReadStream({
       userId: ctx.user.id,
       assetId: params.assetId,
       start,
@@ -65,7 +65,7 @@ export async function GET(
       },
     );
   } else {
-    const stream = createAssetReadStream({
+    const stream = await createAssetReadStream({
       userId: ctx.user.id,
       assetId: params.assetId,
     });

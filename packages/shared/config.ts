@@ -8,6 +8,8 @@ const stringBool = (defaultValue: string) =>
     .refine((s) => s === "true" || s === "false")
     .transform((s) => s === "true");
 
+const CompressionType = z.enum(["zstd", "lz4", "gzip", ""]);
+
 const allEnv = z.object({
   API_URL: z.string().url().default("http://localhost:3000"),
   DISABLE_SIGNUPS: stringBool("false"),
@@ -65,6 +67,12 @@ const allEnv = z.object({
   DATA_DIR: z.string().default(""),
   ASSETS_DIR: z.string().optional(),
   MAX_ASSET_SIZE_MB: z.coerce.number().default(50),
+  COMPRESSION_TYPE: z
+    .string()
+    .transform((val) => val.toLowerCase().trim())
+    .refine((val) => CompressionType.safeParse(val).success, {})
+    .default(""),
+  COMPRESSION_LEVEL: z.coerce.number().int().min(0).lte(22).default(5),
   INFERENCE_LANG: z.string().default("english"),
   WEBHOOK_TIMEOUT_SEC: z.coerce.number().default(5),
   WEBHOOK_RETRY_TIMES: z.coerce.number().int().min(0).default(3),
@@ -149,6 +157,8 @@ const serverConfigSchema = allEnv.transform((val) => {
     dataDir: val.DATA_DIR,
     assetsDir: val.ASSETS_DIR ?? path.join(val.DATA_DIR, "assets"),
     maxAssetSizeMb: val.MAX_ASSET_SIZE_MB,
+    compressionType: val.COMPRESSION_TYPE,
+    compressionLevel: val.COMPRESSION_LEVEL,
     serverVersion: val.SERVER_VERSION,
     disableNewReleaseCheck: val.DISABLE_NEW_RELEASE_CHECK,
     usingLegacySeparateContainers: val.USING_LEGACY_SEPARATE_CONTAINERS,

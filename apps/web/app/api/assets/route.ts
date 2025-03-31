@@ -81,7 +81,7 @@ export async function uploadFromPostData(
       userId: user.id,
       assetId: assetDb.id,
       assetPath: tempFilePath,
-      metadata: { contentType, fileName },
+      metadata: { contentType, fileName, originalSize: data.size },
     });
 
     return {

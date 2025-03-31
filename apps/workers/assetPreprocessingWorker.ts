@@ -139,6 +139,7 @@ export async function extractAndSavePDFScreenshot(
       metadata: {
         contentType,
         fileName,
+        originalSize: screenshot.buffer.byteLength,
       },
     });
 

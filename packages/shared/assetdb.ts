@@ -1,10 +1,17 @@
 import * as fs from "fs";
 import * as path from "path";
+import { Readable } from "stream";
+import { gunzip, gzip } from "zlib";
 import { Glob } from "glob";
+import * as lz4 from "lz4";
 import { z } from "zod";
+import * as zstd from "zstd.ts";
 
 import serverConfig from "./config";
 import logger from "./logger";
+
+const COMPRESSION_TYPE: string = serverConfig.compressionType;
+const COMPRESSION_LEVEL: number = serverConfig.compressionLevel;
 
 const ROOT_PATH = serverConfig.assetsDir;
 
@@ -50,6 +57,7 @@ function getAssetDir(userId: string, assetId: string) {
 export const zAssetMetadataSchema = z.object({
   contentType: z.string(),
   fileName: z.string().nullish(),
+  originalSize: z.number().nullish(),
 });
 
 export function newAssetId() {
@@ -73,10 +81,14 @@ export async function saveAsset({
   const assetDir = getAssetDir(userId, assetId);
   await fs.promises.mkdir(assetDir, { recursive: true });
 
+  metadata.originalSize = asset.byteLength;
+
+  const [compressed, extension] = await compress(asset, COMPRESSION_TYPE);
+
   await Promise.all([
     fs.promises.writeFile(
-      path.join(assetDir, "asset.bin"),
-      Uint8Array.from(asset),
+      path.join(assetDir, "asset.bin" + extension),
+      compressed,
     ),
     fs.promises.writeFile(
       path.join(assetDir, "metadata.json"),
@@ -106,12 +118,27 @@ export async function saveAssetFromFile({
     // We'll have to copy first then delete the original file as inside the docker container
     // we can't move file between mounts.
     fs.promises.copyFile(assetPath, path.join(assetDir, "asset.bin")),
+    // Little to no point in compressing uploaded assets as they are
+    // primarily media files
     fs.promises.writeFile(
       path.join(assetDir, "metadata.json"),
       JSON.stringify(metadata),
     ),
   ]);
   await fs.promises.rm(assetPath);
+}
+
+async function getAssetPath(assetDir: string): Promise<string> {
+  for (const ext of ["", ".zst", ".lz4", ".gz"]) {
+    const pathWithExt = path.join(assetDir, `asset.bin${ext}`);
+    try {
+      await fs.promises.access(pathWithExt);
+      return pathWithExt;
+    } catch (err) {
+      // file doesn't exist, proceed to next.
+    }
+  }
+  return "";
 }
 
 export async function readAsset({
@@ -122,9 +149,17 @@ export async function readAsset({
   assetId: string;
 }) {
   const assetDir = getAssetDir(userId, assetId);
+  const assetPath: string = await getAssetPath(assetDir);
+
+  if (!assetPath) {
+    throw new Error("Asset file not found: " + assetId);
+  }
+
+  const data: Buffer = await fs.promises.readFile(assetPath);
+  const decompressedData: Buffer = await decompress(data, getDataType(data));
 
   const [asset, metadataStr] = await Promise.all([
-    fs.promises.readFile(path.join(assetDir, "asset.bin")),
+    decompressedData,
     fs.promises.readFile(path.join(assetDir, "metadata.json"), {
       encoding: "utf8",
     }),
@@ -134,7 +169,7 @@ export async function readAsset({
   return { asset, metadata };
 }
 
-export function createAssetReadStream({
+export async function createAssetReadStream({
   userId,
   assetId,
   start,
@@ -146,11 +181,23 @@ export function createAssetReadStream({
   end?: number;
 }) {
   const assetDir = getAssetDir(userId, assetId);
+  const assetPath: string = await getAssetPath(assetDir);
 
-  return fs.createReadStream(path.join(assetDir, "asset.bin"), {
-    start,
-    end,
-  });
+  const stream = new Readable();
+  const data: Buffer = await fs.promises.readFile(assetPath);
+  logger.debug(getDataType(data));
+  const decompressedData: Buffer = await decompress(data, getDataType(data));
+
+  if (start !== undefined && end !== undefined) {
+    const slicedBuffer = decompressedData.subarray(start, end);
+    stream.push(slicedBuffer);
+  } else {
+    stream.push(decompressedData);
+  }
+
+  stream.push(null);
+
+  return stream;
 }
 
 export async function readAssetMetadata({
@@ -179,9 +226,16 @@ export async function getAssetSize({
   userId: string;
   assetId: string;
 }) {
-  const assetDir = getAssetDir(userId, assetId);
-  const stat = await fs.promises.stat(path.join(assetDir, "asset.bin"));
-  return stat.size;
+  const metadata = await readAssetMetadata({ userId, assetId });
+  const size = metadata.originalSize;
+  if (size === undefined || size == null) {
+    // this should rarely happen
+    const assetDir = getAssetDir(userId, assetId);
+    const assetPath: string = await getAssetPath(assetDir);
+    const stat = await fs.promises.stat(assetPath);
+    return stat.size; // in case of edge cases that the metadata size is incorrect
+  }
+  return size;
 }
 
 /**
@@ -222,7 +276,7 @@ export async function deleteUserAssets({ userId }: { userId: string }) {
 }
 
 export async function* getAllAssets() {
-  const g = new Glob(`/**/**/asset.bin`, {
+  const g = new Glob(`/**/**/asset.bin*`, {
     maxDepth: 3,
     root: ROOT_PATH,
     cwd: ROOT_PATH,
@@ -266,7 +320,7 @@ export async function storeScreenshot(
   await saveAsset({
     userId,
     assetId,
-    metadata: { contentType, fileName },
+    metadata: { contentType, fileName, originalSize: screenshot.byteLength },
     asset: screenshot,
   });
   logger.info(
@@ -274,3 +328,117 @@ export async function storeScreenshot(
   );
   return { assetId, contentType, fileName, size: screenshot.byteLength };
 }
+
+const compress = async (
+  data: Buffer,
+  type: string,
+): Promise<[Buffer, string]> => {
+  switch (type) {
+    case "zstd": {
+      return [
+        await zstd.compress({
+          compressLevel: Math.min(
+            Math.max(Math.floor(COMPRESSION_LEVEL), 1),
+            19,
+          ),
+          input: data,
+        }),
+        ".zst",
+      ];
+    }
+    case "lz4": {
+      let output = Buffer.alloc(lz4.encodeBound(data.length));
+      const compressedSize: number = lz4.encodeBlockHC(
+        data,
+        output,
+        Math.min(Math.max(Math.floor(COMPRESSION_LEVEL), 3), 12),
+      );
+      output = output.subarray(0, compressedSize);
+      return [output, ".lz4"];
+    }
+
+    case "gzip": {
+      gzip(data, (err, compressedGzip) => {
+        if (err) {
+          console.error("Error during gzip compression:", err);
+          return [data, ""];
+        } else {
+          return [compressedGzip, ".gz"];
+        }
+      });
+      return [data, ""];
+    }
+    default:
+      return [data, ""];
+  }
+};
+
+const getDataType = (data: Buffer): "zstd" | "lz4" | "gzip" | "" => {
+  if (data.length < 4) {
+    return "";
+  }
+
+  // magic numbers
+  // zstd: 0x28B52FFD
+  // gzip: 0x1F8B
+  // lz4: 0x04224D18
+
+  const zstdHeader = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
+  if (data.subarray(0, 4).equals(zstdHeader)) {
+    return "zstd";
+  }
+
+  const gzipHeader = Buffer.from([0x1f, 0x8b]);
+  if (data.subarray(0, 2).equals(gzipHeader)) {
+    return "gzip";
+  }
+
+  const lz4Header = Buffer.from([0x04, 0x22, 0x4d, 0x18]);
+  if (data.subarray(0, 4).equals(lz4Header)) {
+    return "lz4";
+  }
+
+  return "";
+};
+
+const decompress = async (
+  data: Buffer,
+  type: "zstd" | "lz4" | "gzip" | "",
+): Promise<Buffer> => {
+  switch (type) {
+    case "zstd": {
+      try {
+        return await zstd.decompress({ input: data });
+      } catch (err) {
+        console.error("Error during zstd decompression:", err);
+        return data;
+      }
+    }
+
+    case "lz4": {
+      try {
+        let output = Buffer.alloc(data.length);
+        const size: number = lz4.decodeBlock(data, output);
+        output = output.subarray(0, size);
+        return output;
+      } catch (err) {
+        console.error("Error during lz4 decompression:", err);
+        return data;
+      }
+    }
+
+    case "gzip": {
+      gunzip(data, (err, decompressed) => {
+        if (err) {
+          console.error("Error during gzip decompression:", err);
+          return data;
+        }
+        return decompressed;
+      });
+      return data;
+    }
+
+    default:
+      return data;
+  }
+};

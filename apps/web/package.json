@@ -88,6 +88,7 @@
     "sharp": "^0.33.3",
     "superjson": "^2.2.1",
     "tailwind-merge": "^2.2.1",
+    "xxhash": "^0.3.0",
     "zod": "^3.22.4",
     "zustand": "^4.5.1"
   },
