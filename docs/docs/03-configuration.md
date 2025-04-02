@@ -3,7 +3,7 @@
 The app is mainly configured by environment variables. All the used environment variables are listed in [packages/shared/config.ts](https://github.com/hoarder-app/hoarder/blob/main/packages/shared/config.ts). The most important ones are:
 
 | Name                      | Required                              | Default | Description                                                                                                                                    |
-| ------------------------- | ------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+|---------------------------| ------------------------------------- |---------|------------------------------------------------------------------------------------------------------------------------------------------------|
 | DATA_DIR                  | Yes                                   | Not set | The path for the persistent data directory. This is where the db lives. Assets are stored here by default unless `ASSETS_DIR` is set.          |
 | ASSETS_DIR                | No                                    | Not set | The path where crawled assets will be stored. If not set, defaults to `${DATA_DIR}/assets`.                                                    |
 | NEXTAUTH_URL              | Yes                                   | Not set | Should point to the address of your server. The app will function without it, but will redirect you to wrong addresses on signout for example. |
@@ -12,6 +12,8 @@ The app is mainly configured by environment variables. All the used environment 
 | MEILI_MASTER_KEY          | Only in Prod and if search is enabled | Not set | The master key configured for meilisearch. Not needed in development environment. Generate one with `openssl rand -base64 36`                  |
 | MAX_ASSET_SIZE_MB         | No                                    | 50      | Sets the maximum allowed asset size (in MB) to be uploaded                                                                                     |
 | DISABLE_NEW_RELEASE_CHECK | No                                    | false   | If set to true, latest release check will be disabled in the admin panel.                                                                      |
+| COMPRESSION_TYPE          | No                                    | Not set | Whether compression for saved assets is enabled or not. Must be of any: zstd, lz4, or gzip. Your system must have the program installed.       |
+| COMPRESSION_LEVEL         | No                                    | Not set | The compression level. Higher values mean more storage saving, but take more time to complete. Must be within 1-22.                            |
 
 ## Authentication / Signup
 
