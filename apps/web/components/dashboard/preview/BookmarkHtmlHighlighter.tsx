@@ -76,10 +76,10 @@ const ColorPickerMenu: React.FC<ColorPickerMenuProps> = ({
       <PopoverAnchor
         className="fixed"
         style={{
-          left: position.x,
-          top: position.y,
+          left: position?.x,
+          top: position?.y,
           transform: isMobile
-            ? "translate(-50%, 15px)"
+            ? "translate(-50%, 15px)" // adjust for mobile
             : "translate(-50%, -100%) translateY(-15px)",
         }}
       />
@@ -178,13 +178,10 @@ function BookmarkHTMLHighlighter({
   }, []);
 
   useEffect(() => {
-    if (!selectedHighlight) {
-      return;
-    }
-
     const highlightSpan = document.querySelector(
-      `span[data-highlight-id="${selectedHighlight.id}"]`,
+      `span[data-highlight-id="${selectedHighlight?.id}"]`,
     );
+
     if (!highlightSpan) {
       return;
     }
@@ -208,21 +205,31 @@ function BookmarkHTMLHighlighter({
         x: rect.left + rect.width / 2,
         y: isMobile ? rect.bottom + 8 : rect.top - 12,
       });
-      /*
-       fixme
-       jumps to 0,0 sometimes when fab is not visible
-       doesn't scroll when screen resizes
-       doesn't scroll when is windowed??
-       */
+    };
+
+    const debouncedUpdatePosition = () => {
+      if (window.requestAnimationFrame) {
+        window.requestAnimationFrame(updatePosition);
+      } else {
+        setTimeout(updatePosition, 16);
+      }
     };
 
     updatePosition();
+
+    // desktop
     window.addEventListener("scroll", updatePosition, true);
     window.addEventListener("resize", updatePosition);
+
+    // mobile
+    window.addEventListener("touchmove", debouncedUpdatePosition, true);
+    window.addEventListener("touchend", updatePosition);
 
     return () => {
       window.removeEventListener("scroll", updatePosition, true);
       window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("touchmove", debouncedUpdatePosition, true);
+      window.removeEventListener("touchend", updatePosition);
     };
   }, [selectedHighlight, isMobile]);
 

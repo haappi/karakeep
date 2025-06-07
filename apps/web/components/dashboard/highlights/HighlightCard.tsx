@@ -44,8 +44,8 @@ export default function HighlightCard({
           }
         },
         {
-          root: null, // use viewport
-          threshold: 0.5, // Adjust as needed (e.g. 0.5 = half in view)
+          root: null,
+          threshold: 0.5,
         },
       );
 
@@ -118,16 +118,16 @@ export default function HighlightCard({
             <div className="flex flex-col gap-2">
               <p className="text-sm font-medium text-gray-500">
                 [Image highlight]
-              </p>
+              </p>q
               <div
-                className="whitespace-pre-line"
+                className="whitespace-pre-line clear-none text-none"
                 dangerouslySetInnerHTML={{
                   __html: normalizeText(highlight.text) || "",
                 }}
               />
             </div>
           ) : (
-            <p className="whitespace-pre-line">
+            <p className="whitespace-pre-line clear-both">
               {normalizeText(highlight.text)}
             </p>
           )}

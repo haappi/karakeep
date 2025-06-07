@@ -124,7 +124,7 @@ function CachedContentSection({ bookmarkId }: { bookmarkId: string }) {
     content = (
       <BookmarkHTMLHighlighter
         htmlContent={cachedContent || ""}
-        className="prose mx-auto dark:prose-invert"
+        className="prose mx-auto dark:prose-invert !break-words !overflow-auto !overflow-x-auto"
         highlights={highlights?.highlights ?? []}
         onDeleteHighlight={(h) =>
           deleteHighlight({
