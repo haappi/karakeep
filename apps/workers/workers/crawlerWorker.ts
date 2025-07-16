@@ -629,10 +629,13 @@ async function archiveWebpage(
   const assetId = newAssetId();
   const assetPath = `/tmp/${assetId}`;
 
+  const extraMonolithArgs = serverConfig.crawler.monolithArguments;
+  const monolithArgs = ["-", "-b", url, "-o", assetPath, ...extraMonolithArgs];
+
   await execa({
     input: html,
     cancelSignal: abortSignal,
-  })("monolith", ["-", "-Ije", "-t", "5", "-b", url, "-o", assetPath]);
+  })("monolith", monolithArgs);
 
   const contentType = "text/html";
 
