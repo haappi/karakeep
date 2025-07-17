@@ -6,7 +6,7 @@ import { api } from "@/server/api/client";
 export default async function TagsPage() {
   // oxlint-disable-next-line rules-of-hooks
   const { t } = await useTranslation();
-  const allTags = (await api.tags.list()).tags;
+  const { tags: allTags } = await api.tags.list({ limit: 100 });
 
   return (
     <div className="space-y-4 rounded-md border bg-background p-4">
